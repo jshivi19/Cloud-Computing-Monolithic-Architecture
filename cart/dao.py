@@ -3,6 +3,10 @@ import os.path
 import sqlite3
 
 
+# Optimizations:
+# Removed temp and final cart lists for a single list
+# Using JSON instead of eval
+
 def connect(path):
     exists = os.path.exists(path)
     __conn = sqlite3.connect(path)
@@ -27,53 +31,39 @@ def create_tables(conn):
 def get_cart(username: str) -> list:
     conn = connect('carts.db')
     cursor = conn.cursor()
-    if cursor:
-        cursor.execute('SELECT * FROM carts WHERE username = ?', (username,))
-    else:
-        return []
-    
+    cursor.execute('SELECT * FROM carts WHERE username = ?', (username,))
     cart = cursor.fetchall()
-    temp_cart = []
-    for row in cart:
-        temp_cart.append(row)
-    
-    final_cart = []
-    for item in temp_cart:
-        final_cart.append(item)
-    
-    cursor.close()
-    conn.close()
-    return final_cart
-
+    return [dict(row) for row in cart]
 
 def add_to_cart(username: str, product_id: int):
     conn = connect('carts.db')
     cursor = conn.cursor()
     cursor.execute('SELECT contents FROM carts WHERE username = ?', (username,))
-    contents = cursor.fetchone()
-    if contents is None:
-        contents = []
+    row = cursor.fetchone()
+    if row and row['contents']:
+        try:
+            contents = json.loads(row['contents'])
+        except json.JSONDecodeError:
+            contents = []
     else:
-        contents = eval(contents['contents'])
+        contents = []
     contents.append(product_id)
     cursor.execute('INSERT OR REPLACE INTO carts (username, contents, cost) VALUES (?, ?, ?)',
-                   (username, str(contents), 0))
+                    (username, json.dumps(contents), 0))
     conn.commit()
-
+    conn.close()
 
 def remove_from_cart(username: str, product_id: int):
     conn = connect('carts.db')
     cursor = conn.cursor()
     cursor.execute('SELECT contents FROM carts WHERE username = ?', (username,))
-    contents = cursor.fetchone()
-    if contents is None:
-        return
-    contents = eval(contents['contents'])
-    contents.remove(product_id)
-    cursor.execute('INSERT OR REPLACE INTO carts (username, contents, cost) VALUES (?, ?, ?)',
-                   (username, str(contents), 0))
-    conn.commit()
-
+    row = cursor.fetchone()
+    if row:
+        contents = json.loads(row['contents'])
+        contents.remove(product_id)
+        cursor.execute('INSERT OR REPLACE INTO carts (username, contents, cost) VALUES (?, ?, ?)',
+                        (username, json.dumps(contents), 0))
+        conn.commit()
 
 def delete_cart(username: str):
     conn = connect('carts.db')

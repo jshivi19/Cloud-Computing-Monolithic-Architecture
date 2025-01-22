@@ -12,6 +12,7 @@ import os
 
 app = flask.Flask(__name__)
 app.template_folder = 'templates'
+
 SRN = "PES2UG22CS526"
 
 if(SRN[-3:]=="XXX"):
